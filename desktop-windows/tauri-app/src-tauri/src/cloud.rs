@@ -13,7 +13,7 @@
 
 use crossbeam_channel::Receiver;
 use futures_util::{SinkExt, StreamExt};
-use omi_native::audio::{downmix_mono, to_pcm16_le, Resampler};
+use omi_native::audio::{to_pcm16_le, StreamMixer};
 use omi_native::AudioFrame;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -42,41 +42,47 @@ impl Drop for StreamHandle {
     }
 }
 
-/// Start streaming `frames` to the Omi cloud. Returns immediately; the WebSocket
-/// runs on the Tauri async runtime and the resampler on a dedicated thread.
+/// Start streaming captured audio to the Omi cloud. `mic_rx` is required; when
+/// `sys_rx` is present (Windows WASAPI loopback) it is mixed in. Returns
+/// immediately; the WebSocket runs on the Tauri async runtime and the
+/// resample+mix on a dedicated thread.
 pub fn start(
     app: AppHandle,
-    frames: Receiver<AudioFrame>,
+    mic_rx: Receiver<AudioFrame>,
+    sys_rx: Option<Receiver<AudioFrame>>,
     token: String,
     language: String,
 ) -> StreamHandle {
     let stop = Arc::new(AtomicBool::new(false));
 
-    // Resampler thread: crossbeam frames → mono 16k PCM16 bytes → async channel.
+    // Mixer thread: mic (+ optional system) frames → mono 16k PCM16 → async channel.
     let (byte_tx, byte_rx) = mpsc::unbounded_channel::<Vec<u8>>();
     {
         let stop = stop.clone();
         std::thread::Builder::new()
-            .name("omi-resampler".into())
+            .name("omi-mixer".into())
             .spawn(move || {
-                let mut resampler: Option<Resampler> = None;
+                let mut mixer = StreamMixer::new(sys_rx.is_some());
                 while !stop.load(Ordering::SeqCst) {
-                    // Block briefly for the next frame; loop re-checks the stop flag.
-                    let frame = match frames.recv_timeout(std::time::Duration::from_millis(250)) {
-                        Ok(f) => f,
-                        Err(crossbeam_channel::RecvTimeoutError::Timeout) => continue,
-                        Err(_) => break, // capture stopped → source dropped
-                    };
-                    let r = resampler
-                        .get_or_insert_with(|| Resampler::new(frame.sample_rate, TARGET_SAMPLE_RATE));
-                    let mono = downmix_mono(&frame);
-                    let pcm = r.process(&mono);
-                    if !pcm.is_empty() && byte_tx.send(to_pcm16_le(&pcm)).is_err() {
+                    // Mic clocks the stream: block briefly for the next mic frame.
+                    match mic_rx.recv_timeout(std::time::Duration::from_millis(100)) {
+                        Ok(f) => mixer.push_mic(&f),
+                        Err(crossbeam_channel::RecvTimeoutError::Timeout) => {}
+                        Err(_) => break, // mic stopped → source dropped
+                    }
+                    // Drain whatever system audio is available without blocking.
+                    if let Some(rx) = &sys_rx {
+                        while let Ok(f) = rx.try_recv() {
+                            mixer.push_system(&f);
+                        }
+                    }
+                    let mixed = mixer.drain();
+                    if !mixed.is_empty() && byte_tx.send(to_pcm16_le(&mixed)).is_err() {
                         break; // WS task gone
                     }
                 }
             })
-            .expect("spawn resampler thread");
+            .expect("spawn mixer thread");
     }
 
     // WebSocket task.

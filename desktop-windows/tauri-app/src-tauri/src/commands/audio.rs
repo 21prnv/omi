@@ -32,13 +32,14 @@ pub fn start_capture(
     let mic_rx = mic.start().map_err(|e| e.to_string())?;
     handles.mic = Some(mic);
 
+    // Optionally capture system audio (WASAPI loopback) and mix it into the stream.
+    let mut sys_rx = None;
     if system_audio {
         // On non-Windows this returns Unsupported; surface it but keep mic going.
         let mut sys = SystemAudioCapture::new();
         match sys.start() {
-            Ok(_sys_rx) => {
-                // TODO: mix _sys_rx with mic_rx (drift-correcting AudioMixer) before
-                // streaming. Until then only the mic feeds the cloud.
+            Ok(rx) => {
+                sys_rx = Some(rx);
                 handles.system = Some(sys);
             }
             Err(e) => tracing::warn!("system audio unavailable: {e}"),
@@ -46,7 +47,7 @@ pub fn start_capture(
     }
 
     let language = language.unwrap_or_else(|| "en".to_string());
-    handles.stream = Some(cloud::start(app, mic_rx, token, language));
+    handles.stream = Some(cloud::start(app, mic_rx, sys_rx, token, language));
     Ok(())
 }
 
