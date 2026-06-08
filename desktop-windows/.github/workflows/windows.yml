@@ -1,0 +1,59 @@
+# Windows CI — the verification gate for everything that CANNOT be compiled on the
+# macOS dev machine (WASAPI loopback, WGC, Media Foundation, the Tauri bundle).
+# Every PR touching desktop-windows/ must pass this before merge.
+name: desktop-windows
+
+on:
+  push:
+    paths: ["desktop-windows/**"]
+  pull_request:
+    paths: ["desktop-windows/**"]
+
+defaults:
+  run:
+    working-directory: desktop-windows
+
+jobs:
+  native-windows:
+    name: omi-native + tauri (windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop-windows
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # Build the web UI so tauri::generate_context! finds ui/dist.
+      - name: Build frontend
+        working-directory: desktop-windows/tauri-app/ui
+        run: |
+          npm ci
+          npm run build
+
+      # The real verification: compiles the cfg(windows) WASAPI/WGC/OCR code +
+      # the full Tauri app, which never builds on the macOS dev box.
+      - name: Compile workspace (windows targets)
+        run: cargo build --workspace --all-targets
+
+      - name: Clippy
+        run: cargo clippy --workspace -- -D warnings
+
+  # Cross-platform crate also stays green on Linux (cheap regression guard for the
+  # non-Windows stubs + the cpal mic path).
+  native-linux:
+    name: omi-native (linux stubs)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: ALSA dev headers (cpal)
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev
+      - name: Check omi-native
+        run: cargo check -p omi-native
