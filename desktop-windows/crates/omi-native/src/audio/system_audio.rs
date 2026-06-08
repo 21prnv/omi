@@ -60,12 +60,71 @@ mod imp {
     use std::sync::Arc;
     use windows::Win32::Media::Audio::{
         eConsole, eRender, IAudioCaptureClient, IAudioClient, IMMDeviceEnumerator,
-        MMDeviceEnumerator, AUDCLNT_BUFFERFLAGS_SILENT, AUDCLNT_SHAREMODE_SHARED,
-        AUDCLNT_STREAMFLAGS_LOOPBACK,
+        MMDeviceEnumerator, WAVEFORMATEX, WAVEFORMATEXTENSIBLE, AUDCLNT_BUFFERFLAGS_SILENT,
+        AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_LOOPBACK,
     };
     use windows::Win32::System::Com::{
         CoCreateInstance, CoInitializeEx, CLSCTX_ALL, COINIT_MULTITHREADED,
     };
+
+    /// WASAPI shared-mode mix format varies by device: 32-bit float (most common),
+    /// 16-bit PCM, or 32-bit PCM. Detected once, then each packet is converted to
+    /// i16 accordingly — assuming f32 blindly would garble non-float devices.
+    #[derive(Clone, Copy)]
+    enum SampleFmt {
+        F32,
+        I16,
+        I32,
+    }
+
+    unsafe fn detect_format(wf: *const WAVEFORMATEX) -> Result<SampleFmt> {
+        const WAVE_FORMAT_PCM: u16 = 1;
+        const WAVE_FORMAT_IEEE_FLOAT: u16 = 3;
+        const WAVE_FORMAT_EXTENSIBLE: u16 = 0xFFFE;
+        // KSDATAFORMAT_SUBTYPE_IEEE_FLOAT {00000003-0000-0010-8000-00AA00389B71}
+        let ieee_float =
+            windows_core::GUID::from_u128(0x0000_0003_0000_0010_8000_00AA_0038_9B71);
+
+        let bits = (*wf).wBitsPerSample;
+        Ok(match (*wf).wFormatTag {
+            WAVE_FORMAT_IEEE_FLOAT => SampleFmt::F32,
+            WAVE_FORMAT_PCM if bits == 16 => SampleFmt::I16,
+            WAVE_FORMAT_PCM => SampleFmt::I32,
+            WAVE_FORMAT_EXTENSIBLE => {
+                let ext = wf as *const WAVEFORMATEXTENSIBLE;
+                // WAVEFORMATEXTENSIBLE is #[repr(packed)] — read the field through a
+                // raw pointer to avoid creating an unaligned reference (UB).
+                let subformat = std::ptr::addr_of!((*ext).SubFormat).read_unaligned();
+                if subformat == ieee_float {
+                    SampleFmt::F32
+                } else if bits == 16 {
+                    SampleFmt::I16
+                } else {
+                    SampleFmt::I32
+                }
+            }
+            tag => {
+                return Err(Error::Audio(format!(
+                    "unsupported WASAPI format tag {tag} ({bits}-bit)"
+                )))
+            }
+        })
+    }
+
+    /// Convert one interleaved device buffer to i16 samples per the detected format.
+    unsafe fn to_i16(data_ptr: *const u8, count: usize, fmt: SampleFmt) -> Vec<i16> {
+        match fmt {
+            SampleFmt::F32 => std::slice::from_raw_parts(data_ptr as *const f32, count)
+                .iter()
+                .map(|&v| (v * i16::MAX as f32).clamp(i16::MIN as f32, i16::MAX as f32) as i16)
+                .collect(),
+            SampleFmt::I16 => std::slice::from_raw_parts(data_ptr as *const i16, count).to_vec(),
+            SampleFmt::I32 => std::slice::from_raw_parts(data_ptr as *const i32, count)
+                .iter()
+                .map(|&v| (v >> 16) as i16)
+                .collect(),
+        }
+    }
 
     pub struct Inner {
         running: Arc<AtomicBool>,
@@ -110,6 +169,7 @@ mod imp {
             let mix_format = client.GetMixFormat().map_err(os)?;
             let sample_rate = (*mix_format).nSamplesPerSec;
             let channels = (*mix_format).nChannels;
+            let fmt = detect_format(mix_format)?;
 
             client
                 .Initialize(
@@ -137,10 +197,8 @@ mod imp {
 
                     let silent = flags & AUDCLNT_BUFFERFLAGS_SILENT.0 as u32 != 0;
                     if !silent && num_frames > 0 {
-                        let float_count = num_frames as usize * channels as usize;
-                        let floats = std::slice::from_raw_parts(data_ptr as *const f32, float_count);
-                        let samples =
-                            floats.iter().map(|&s| (s * i16::MAX as f32) as i16).collect();
+                        let count = num_frames as usize * channels as usize;
+                        let samples = to_i16(data_ptr as *const u8, count, fmt);
                         let _ = tx.try_send(AudioFrame { samples, sample_rate, channels });
                     }
 

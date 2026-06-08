@@ -4,10 +4,14 @@
 
 mod mic;
 mod system_audio;
+pub mod mixer;
 pub mod resample;
-pub mod vad_gate;
+// Local VAD is intentionally omitted: the backend gates silence server-side. If
+// added later, use a pure-Rust VAD (e.g. `earshot`) so the crate keeps
+// cross-compiling to Windows from the macOS dev box (no C toolchain).
 
 pub use mic::MicCapture;
+pub use mixer::StreamMixer;
 pub use resample::{downmix_mono, to_pcm16_le, Resampler};
 pub use system_audio::SystemAudioCapture;
 

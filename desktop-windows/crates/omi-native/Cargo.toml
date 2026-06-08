@@ -16,9 +16,6 @@ crossbeam-channel = "0.5"
 # Lets us verify the mic path on the dev machine before touching Windows-only code.
 cpal = "0.15"
 
-# Voice-activity detection — pure Rust, portable.
-webrtc-vad = "0.4"
-
 # ── Windows-only native integrations ────────────────────────────────────────
 # Gated so the crate still builds on macOS/Linux for CI on the cross-platform parts.
 [target.'cfg(windows)'.dependencies]
@@ -28,12 +25,11 @@ windows = { version = "0.58", features = [
     "Win32_Media_Audio_Endpoints",
     "Win32_System_Com",
     "Win32_System_Com_StructuredStorage",
+    "Win32_System_Threading",             # OpenProcess for foreground-app name
     "Win32_Devices_FunctionDiscovery",
-    "Graphics_Capture",                   # Windows.Graphics.Capture (screen capture)
-    "Graphics_DirectX_Direct3D11",
-    "Win32_Graphics_Direct3D11",
-    "Win32_Graphics_Dxgi",
-    "Media_Ocr",                          # Rewind OCR
+    "Win32_Graphics_Gdi",                 # BitBlt one-shot screen capture
+    "Win32_UI_WindowsAndMessaging",       # GetForegroundWindow / GetSystemMetrics
+    "Media_Ocr",                          # Rewind OCR (future)
     "Globalization",
     "Storage_Streams",
 ] }
