@@ -57,3 +57,21 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libasound2-dev
       - name: Check omi-native
         run: cargo check -p omi-native
+
+  # Fast feedback on the cfg(windows) native code (WASAPI/GDI/Win32) WITHOUT a
+  # Windows runner: `cargo check` doesn't link, and omi-native has no C deps, so
+  # the windows-msvc target type-checks on Linux in seconds. Catches most native
+  # errors long before the full windows-latest build.
+  native-crosscheck:
+    name: omi-native (windows-msvc cross-check)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: desktop-windows
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+      - name: Cross-check Windows native code
+        run: cargo clippy -p omi-native --target x86_64-pc-windows-msvc -- -D warnings
