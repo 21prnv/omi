@@ -1,0 +1,44 @@
+[package]
+name = "omi-native"
+version = "0.1.0"
+edition = "2021"
+description = "Windows-native OS integrations for Omi desktop (replaces the macOS Swift layer)"
+
+[dependencies]
+# Cross-platform primitives (compile on every OS, including the macOS dev box)
+thiserror = "2"
+tracing = "0.1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+crossbeam-channel = "0.5"
+
+# Microphone capture — cross-platform (CoreAudio on macOS, WASAPI on Windows).
+# Lets us verify the mic path on the dev machine before touching Windows-only code.
+cpal = "0.15"
+
+# Voice-activity detection — pure Rust, portable.
+webrtc-vad = "0.4"
+
+# ── Windows-only native integrations ────────────────────────────────────────
+# Gated so the crate still builds on macOS/Linux for CI on the cross-platform parts.
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.58", features = [
+    "Win32_Foundation",
+    "Win32_Media_Audio",                  # WASAPI (mic + loopback / system audio)
+    "Win32_Media_Audio_Endpoints",
+    "Win32_System_Com",
+    "Win32_System_Com_StructuredStorage",
+    "Win32_Devices_FunctionDiscovery",
+    "Graphics_Capture",                   # Windows.Graphics.Capture (screen capture)
+    "Graphics_DirectX_Direct3D11",
+    "Win32_Graphics_Direct3D11",
+    "Win32_Graphics_Dxgi",
+    "Media_Ocr",                          # Rewind OCR
+    "Globalization",
+    "Storage_Streams",
+] }
+windows-core = "0.58"
+
+[lints.rust]
+# Windows modules carry stubs on non-Windows; silence the expected dead_code there.
+unexpected_cfgs = "allow"
