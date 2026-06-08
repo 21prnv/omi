@@ -1,0 +1,18 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/omi-native",
+    "tauri-app/src-tauri",
+]
+
+# Thin-client architecture: NO local backend. The React UI calls the existing
+# Omi cloud APIs (api.omi.me) directly with a Firebase ID token. Rust/Tauri only
+# owns native Windows capabilities (audio, screen, tray, global shortcut) via the
+# omi-native crate. The Omi backend is reused as-is in the cloud, never rebuilt.
+
+[profile.release]
+# Tauri default: smaller, faster-to-ship Windows binaries.
+opt-level = "s"
+lto = true
+codegen-units = 1
+strip = true
