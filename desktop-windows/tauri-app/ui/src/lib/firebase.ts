@@ -24,9 +24,10 @@ export const auth = getAuth(firebaseApp);
  *  Rust opens the browser to Omi's backend OAuth broker and returns the auth
  *  code; we exchange it for a Firebase custom token (same broker the Mac app
  *  uses), then sign in. Avoids the embedded-webview popup block entirely. */
-export async function signInWithGoogle(): Promise<void> {
+export async function signInWithGoogle(provider: "google" | "apple" = "google"): Promise<void> {
   const { code, redirect_uri } = await invoke<{ code: string; redirect_uri: string }>(
-    "google_oauth_listen"
+    "google_oauth_listen",
+    { provider }
   );
   const base = await invoke<string>("get_api_base_url");
   const res = await fetch(`${base}/v1/auth/token`, {
