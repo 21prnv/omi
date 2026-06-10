@@ -6,7 +6,7 @@ interface AuthState {
   user: User | null;
   loading: boolean;
   error: string | null;
-  signIn: () => Promise<void>;
+  signIn: (provider?: "google" | "apple") => Promise<void>;
   signOut: () => Promise<void>;
 }
 
@@ -19,9 +19,9 @@ export const useAuthStore = create<AuthState>((set) => {
     user: null,
     loading: true,
     error: null,
-    signIn: async () => {
+    signIn: async (provider = "google") => {
       try {
-        await signInWithGoogle();
+        await signInWithGoogle(provider);
         set({ error: null });
       } catch (e) {
         set({ error: String(e) });
