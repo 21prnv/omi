@@ -18,8 +18,11 @@
     "lucide-react": "^0.469.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "react-force-graph-3d": "^1.29.1",
     "react-router-dom": "^6.28.0",
     "tailwind-merge": "^2.6.0",
+    "three": "^0.184.0",
+    "three-spritetext": "^1.10.0",
     "zustand": "^5.0.2"
   },
   "devDependencies": {
