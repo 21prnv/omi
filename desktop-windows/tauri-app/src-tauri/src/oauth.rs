@@ -30,9 +30,11 @@ fn api_base() -> String {
 }
 
 /// Run the loopback OAuth dance and return the authorization code. The UI then
-/// exchanges it for a Firebase custom token. Times out after 5 minutes.
+/// exchanges it for a Firebase custom token. `provider` is "google" or "apple".
+/// Times out after 5 minutes.
 #[tauri::command]
-pub async fn google_oauth_listen() -> Result<OAuthResult, String> {
+pub async fn google_oauth_listen(provider: Option<String>) -> Result<OAuthResult, String> {
+    let provider = provider.unwrap_or_else(|| "google".to_string());
     let listener = TcpListener::bind("127.0.0.1:0")
         .await
         .map_err(|e| format!("bind loopback: {e}"))?;
@@ -41,8 +43,9 @@ pub async fn google_oauth_listen() -> Result<OAuthResult, String> {
     let state = uuid::Uuid::new_v4().to_string();
 
     let auth_url = format!(
-        "{}/v1/auth/authorize?provider=google&redirect_uri={}&state={}",
+        "{}/v1/auth/authorize?provider={}&redirect_uri={}&state={}",
         api_base(),
+        provider,
         urlencoding::encode(&redirect_uri),
         urlencoding::encode(&state),
     );
