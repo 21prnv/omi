@@ -228,6 +228,20 @@ export const omi = {
 
   // Goals — matches macOS Goals widget.
   listGoals: () => request<Goal[]>(`/v1/goals/all`),
+  createGoal: (title: string) => {
+    const num = title.match(/[\d,.]+/);
+    const target = num ? parseFloat(num[0].replace(/,/g, "")) : 1;
+    return request<Goal>(`/v1/goals`, {
+      method: "POST",
+      body: JSON.stringify({
+        title,
+        goal_type: num ? "numeric" : "boolean",
+        target_value: target,
+        current_value: 0,
+        source: "onboarding",
+      }),
+    });
+  },
 };
 
 // ── Chat streaming ──────────────────────────────────────────────────────────
