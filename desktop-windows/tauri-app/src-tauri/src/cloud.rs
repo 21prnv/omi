@@ -24,6 +24,7 @@ use tokio_tungstenite::tungstenite::Message;
 const TARGET_SAMPLE_RATE: u32 = 16000;
 pub const TRANSCRIPT_EVENT: &str = "omi://transcript";
 pub const STATUS_EVENT: &str = "omi://stream-status";
+pub const CONVERSATION_EVENT: &str = "omi://conversation";
 
 /// Handle to a running stream; dropping or calling `stop()` tears it down.
 pub struct StreamHandle {
@@ -157,15 +158,26 @@ async fn run_ws(
     Ok(())
 }
 
-/// Forward a server message to the UI. Transcript payloads are JSON arrays of
-/// segments; typed `{"type":...}` events are passed through untouched.
+/// Forward a server message to the UI. Three shapes arrive over the listen
+/// socket (see backend/routers/transcribe.py):
+///   - JSON array of TranscriptSegment  → live transcript
+///   - {"type":"memory_created"|"memory_processing_started", "memory":{…}}
+///       → conversation lifecycle (mirrors macOS handleListenEvent)
+///   - other typed objects / "ping"     → status / ignored
 fn emit_transcript(app: &AppHandle, text: &str) {
     match serde_json::from_str::<serde_json::Value>(text) {
         Ok(v) if v.is_array() => {
             let _ = app.emit(TRANSCRIPT_EVENT, v);
         }
         Ok(v) => {
-            let _ = app.emit(STATUS_EVENT, v);
+            let ty = v.get("type").and_then(|t| t.as_str()).unwrap_or("");
+            let is_conversation =
+                v.get("memory").is_some() || ty.starts_with("memory") || ty.contains("conversation");
+            if is_conversation {
+                let _ = app.emit(CONVERSATION_EVENT, v);
+            } else {
+                let _ = app.emit(STATUS_EVENT, v);
+            }
         }
         Err(_) => {} // "ping" and other non-JSON keepalives
     }

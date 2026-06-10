@@ -43,6 +43,7 @@ fn main() {
             commands::audio::stop_capture,
             commands::audio::list_input_devices,
             commands::settings::get_api_base_url,
+            commands::settings::open_url,
             oauth::google_oauth_listen,
         ])
         .run(tauri::generate_context!())
