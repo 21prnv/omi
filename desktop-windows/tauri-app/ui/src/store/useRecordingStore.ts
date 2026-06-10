@@ -41,6 +41,10 @@ export const useRecordingStore = create<RecordingState>((set, get) => ({
     try {
       await invoke("stop_capture");
       set({ recording: false });
+      // On explicit stop the backend finalizes the conversation server-side; the
+      // memory_created event may not arrive over the closing socket, so nudge a
+      // list refresh shortly after to pick it up (matches macOS loadConversations).
+      setTimeout(() => useTranscriptStore.getState().bumpConversations(), 4000);
     } catch (e) {
       set({ error: String(e) });
     }
