@@ -101,7 +101,6 @@ export function Onboarding() {
 
   return (
     <div className="flex h-screen flex-col bg-omi-bg text-omi-text">
-      {/* Header */}
       <div className="flex shrink-0 items-center justify-between border-b border-white/[0.04] px-6 py-3.5">
         <div className="flex items-center gap-2">
           <img src="/brand/omi-mark.png" alt="omi" className="h-5 w-5" />
