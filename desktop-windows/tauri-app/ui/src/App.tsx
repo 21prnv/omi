@@ -54,7 +54,6 @@ function MainShell() {
     );
   }
 
-  // Sidebar on a dark surround; content in a rounded, inset, bordered panel.
   return (
     <div className="flex h-screen bg-[#070707] text-omi-text">
       <Sidebar />
