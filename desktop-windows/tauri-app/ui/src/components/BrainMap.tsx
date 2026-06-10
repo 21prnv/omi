@@ -38,10 +38,12 @@ export default function BrainMap({
   userName: string;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [width, setWidth] = useState(600);
+  const [dims, setDims] = useState({ w: 600, h: 330 });
 
   useEffect(() => {
-    const update = () => containerRef.current && setWidth(containerRef.current.clientWidth);
+    const update = () =>
+      containerRef.current &&
+      setDims({ w: containerRef.current.clientWidth, h: containerRef.current.clientHeight });
     update();
     const ro = new ResizeObserver(update);
     if (containerRef.current) ro.observe(containerRef.current);
@@ -81,12 +83,12 @@ export default function BrainMap({
   }, [nodes, edges, userName]);
 
   return (
-    <div ref={containerRef} className="h-[330px] w-full">
+    <div ref={containerRef} className="h-full min-h-[200px] w-full">
       <ForceGraph3D
         graphData={data}
-        width={width}
-        height={330}
-        backgroundColor="rgba(0,0,0,0)"
+        width={dims.w}
+        height={dims.h}
+        backgroundColor="#000000"
         showNavInfo={false}
         nodeRelSize={4}
         nodeVal={(n: GNode) => n.val}
@@ -105,8 +107,8 @@ export default function BrainMap({
           );
           return sprite;
         }}
-        linkColor={() => "rgba(140,140,150,0.25)"}
-        linkWidth={0.4}
+        linkColor={() => "rgba(255,255,255,0.6)"}
+        linkWidth={0.5}
         warmupTicks={80}
         cooldownTicks={150}
       />
